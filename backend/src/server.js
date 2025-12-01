@@ -1,8 +1,11 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path'; //this is a build-in node module
+//no need to install it
 import notesRoutes from './routes/notesRoutes.js';
 import { connectDB } from './config/db.js';
+
 
 //const express = require("express") this and the above line are the same
 //they are just different syntaxes
@@ -16,6 +19,10 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5001;
 //what this port line does is if there is a port defined in the environment variable use that otherwise use 5001
+const __dirname = path.resolve();
+//?this is used to get the current directory name in ES modules
+//since __dirname is not available in ES modules by default
+//we use path.resolve() to get the absolute path of the current directory
 
 //middleware to parse json bodies
 //it allows us to get access to req.body in controllers
@@ -24,9 +31,20 @@ app.use(express.json());
 
 //?using cors middleware this shud be placed before the rateLimiter middleware
 //because we want to handle CORS before rate limiting
-app.use(cors({
-    origin: "http://localhost:5173",
+
+//lets check if it's in development mode
+if (process.env.NODE_ENV !== "production") {
+    app.use(
+        cors({
+             origin: "http://localhost:5173",
 }));
+}
+
+
+//!important note, when we r deploying this, and get frintend and backend on a same domain,
+//we will need to change the cors origin to that domain
+//since cors errors basically happen when the frontend and backend r on different domains
+//so when deploying make sure to update the origin accordingly
 
 //?our custom middleware to log request method and url
 //* app.use((req, res, next) => {
@@ -46,6 +64,32 @@ app.use(rateLimiter);
 
 //?since /api/notes appears in all routes we can create a middleware
 app.use("/api/notes", notesRoutes);
+
+//?we are use a different middleware to serve static files in production
+
+//the if condition checks if we are in production mode
+//by checking the NODE_ENV environment variable is set to "production"
+if (process.env.NODE_ENV === "production") {
+    app.use(express.static(path.join(__dirname,"../frontend/dist")));
+    //this serves the static asset from the frontend's dist folder
+    //serve out optimized react application
+    //path.join is used to create a path that works across different operating systems
+    
+    //TODO, in simple terms, this says to go to frontend's dist folder and serve the static files there
+    
+    //*if there is anything that does not match the api routes, we will serve the frontend application
+    //this is for handling client side routing in react
+    //?so basically if the user tries to access a route like /note/123, the backend will serve the react app
+    //?and then react router will take over and render the correct page based on the route
+    //since we only have api routes defined in the backend
+    //any other route should serve the react app
+    
+    app.get("*", (req, res) => {
+        res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"));
+        //this will send the index.html file for any route not handled by the api routes
+        //so react router can handle the routing on the client side
+    });
+}
 
 //*creating a route
 // app.get("/api/notes", (req, res) => {
